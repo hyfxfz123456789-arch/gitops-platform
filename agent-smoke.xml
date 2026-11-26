@@ -1,0 +1,18 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<flow-definition plugin="workflow-job">
+  <description>验证 Jenkins Kubernetes 动态 Agent 能创建 Pod、运行命令并自动回收。</description>
+  <keepDependencies>false</keepDependencies>
+  <properties/>
+  <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps">
+    <script><![CDATA[
+node('jenkins-jenkins-agent') {
+  stage('agent-smoke') {
+    sh 'echo agent-node=$(hostname); echo agent-pod=$HOSTNAME; date -u'
+  }
+}
+]]></script>
+    <sandbox>true</sandbox>
+  </definition>
+  <triggers/>
+  <disabled>false</disabled>
+</flow-definition>

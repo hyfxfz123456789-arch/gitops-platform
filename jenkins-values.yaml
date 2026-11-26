@@ -1,0 +1,101 @@
+controller:
+  image:
+    pullPolicy: IfNotPresent
+
+  javaOpts: >-
+    -Djavax.net.ssl.trustStore=/opt/jenkins-truststore/cacerts
+    -Djavax.net.ssl.trustStorePassword=changeit
+
+  customInitContainers:
+    - name: import-gitlab-ca
+      image: '{{ .Values.controller.image.registry }}/{{ .Values.controller.image.repository }}:{{ include "controller.image.tag" . }}'
+      imagePullPolicy: IfNotPresent
+      securityContext:
+        runAsUser: 0
+        runAsNonRoot: false
+      command:
+        - sh
+        - -ec
+        - |
+          cp "$JAVA_HOME/lib/security/cacerts" /truststore/cacerts
+          keytool -importcert -noprompt -trustcacerts \
+            -alias gitops-lab-ca \
+            -file /ca/ca.crt \
+            -keystore /truststore/cacerts \
+            -storepass changeit
+          chmod 0644 /truststore/cacerts
+      volumeMounts:
+        - name: gitlab-ca
+          mountPath: /ca
+          readOnly: true
+        - name: gitlab-truststore
+          mountPath: /truststore
+
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "2"
+      memory: 3Gi
+
+  initContainerEnv:
+    - name: JAVA_TOOL_OPTIONS
+      value: "-Dhttp.proxyHost=192.168.1.5 -Dhttp.proxyPort=10808 -Dhttps.proxyHost=192.168.1.5 -Dhttps.proxyPort=10808 -Dhttp.nonProxyHosts=localhost|127.*|kubernetes.default|*.svc|*.cluster.local|10.*|192.168.119.*"
+    - name: HTTP_PROXY
+      value: http://192.168.1.5:10808
+    - name: HTTPS_PROXY
+      value: http://192.168.1.5:10808
+    - name: NO_PROXY
+      value: localhost,127.0.0.1,.svc,.cluster.local,10.96.0.0/12,10.244.0.0/16,192.168.119.0/24
+
+  containerEnv:
+    - name: JAVA_TOOL_OPTIONS
+      value: "-Dhttp.proxyHost=192.168.1.5 -Dhttp.proxyPort=10808 -Dhttps.proxyHost=192.168.1.5 -Dhttps.proxyPort=10808 -Dhttp.nonProxyHosts=localhost|127.*|kubernetes.default|*.svc|*.cluster.local|10.*|192.168.119.*"
+    - name: HTTP_PROXY
+      value: http://192.168.1.5:10808
+    - name: HTTPS_PROXY
+      value: http://192.168.1.5:10808
+    - name: NO_PROXY
+      value: localhost,127.0.0.1,.svc,.cluster.local,10.96.0.0/12,10.244.0.0/16,192.168.119.0/24
+
+  additionalPlugins:
+    - gitlab-plugin
+
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    hostName: jenkins.lab
+    path: /
+
+agent:
+  image:
+    registry: 192.168.119.166:8443
+    repository: gitops-demo/jenkins-inbound-agent
+    tag: 3395.v6e5377b_0fb_3c-2-jdk25
+  imagePullSecretName: harbor-pull
+  websocket: true
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+persistence:
+  enabled: true
+  storageClass: local-path
+  size: 8Gi
+
+  volumes:
+    - name: gitlab-ca
+      configMap:
+        name: harbor-ca
+    - name: gitlab-truststore
+      emptyDir: {}
+
+  mounts:
+    - name: gitlab-truststore
+      mountPath: /opt/jenkins-truststore
+      readOnly: true
